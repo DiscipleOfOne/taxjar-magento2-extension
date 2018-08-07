@@ -136,7 +136,6 @@ class Smartcalcs
             \Magento\Store\Model\ScopeInterface::SCOPE_STORE,
             $quote->getStoreId()
         ));
-
         if (!$apiKey) {
             return;
         }
@@ -203,6 +202,9 @@ class Smartcalcs
             'nexus_addresses' => $this->_getNexusAddresses($quote->getStoreId()),
             'plugin' => 'magento'
         ]);
+
+        $customer = $quote->getCustomer();
+
 
         if ($this->_orderChanged($order)) {
             $client = $this->clientFactory->create();

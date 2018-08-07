@@ -42,6 +42,8 @@ class Configuration
     const TAXJAR_CALCULATIONS_LOG     = 'calculations.log';
     const TAXJAR_TRANSACTIONS_LOG     = 'transactions.log';
     const TAXJAR_EXEMPT_TAX_CODE      = '99999';
+    const TAXJAR_DEFAULT_EXEMPT_TYPE  = 'non_exempt';
+
 
     /**
      * @var \Magento\Config\Model\ResourceModel\Config
