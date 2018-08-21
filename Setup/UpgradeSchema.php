@@ -86,5 +86,132 @@ class UpgradeSchema implements UpgradeSchemaInterface
 
             $installer->endSetup();
         }
+
+        if (version_compare($context->getVersion(), '1.2.0' < 0)) {
+            $installer = $setup;
+            $installer->startSetup();
+
+            /**
+             * Create table 'taxjar_queue'
+             */
+            $table = $installer->getConnection()->newTable(
+                $installer->getTable('taxjar_queue'))
+                ->addColumn(
+                    'id',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER,
+                    11,
+                    ['identity' => true, 'unsigned' => true, 'nullable' => false, 'primary' => true],
+                    'ID')
+                ->addColumn(
+                    'store_id',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER,
+                    null,
+                    ['nullable' => false],
+                    'Store ID'
+                )
+                ->addColumn(
+                    'method',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_TEXT,
+                    null,
+                    ['nullable' => false],
+                    'Queue method')
+                ->addColumn(
+                    'args',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_TEXT,
+                    null,
+                    ['nullable' => false],
+                    'Type ID')
+                ->addColumn(
+                    'class',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_TEXT,
+                    null,
+                    ['nullable' => false],
+                    'Class To Instantiate')
+                ->addColumn(
+                    'hash',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_TEXT,
+                    40,
+                    ['nullable' => false],
+                    'Has options')
+                ->addColumn(
+                    'queue',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_TEXT,
+                    255,
+                    ['nullable' => false],
+                    'Required options')
+                ->addColumn(
+                    'priority',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER,
+                    10,
+                    [],
+                    'Queue priority')
+                ->addColumn(
+                    'attempts',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER,
+                    10,
+                    [],
+                    'Attempts to run queue')
+                ->addColumn(
+                    'run_at',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_DATETIME,
+                    null,
+                    [],
+                    'Initial run time')
+                ->addColumn(
+                    'locked_at',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_DATETIME,
+                    null,
+                    [],
+                    'Locked at time')
+                ->addColumn(
+                    'locked_by',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_TEXT,
+                    255,
+                    [],
+                    'Locked by pid')
+                ->addColumn(
+                    'error',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_TEXT,
+                    null,
+                    [],
+                    'Next run time')
+                ->addColumn(
+                    'next_run_at',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_DATETIME,
+                    null,
+                    [],
+                    'Next run time')
+                ->addColumn(
+                    'created_at',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_DATETIME,
+                    null,
+                    [],
+                    'Time Created')
+                ->addColumn(
+                    'updated_at',
+                    \Magento\Framework\DB\Ddl\Table::TYPE_TIMESTAMP,
+                    null,
+                    ['nullable' => false, 'default' => \Magento\Framework\DB\Ddl\Table::TIMESTAMP_INIT],
+                    'Time Updated'
+                )
+                ->setComment('Taxjar Queue Table');
+            $installer->getConnection()->createTable($table);
+            $installer->getConnection()->addIndex(
+                $setup->getTable('taxjar_queue'),
+                $setup->getIdxName('taxjar_queue', ['next_run_at']),
+                ['next_run_at']
+            );
+            $installer->getConnection()->addIndex(
+                $setup->getTable('taxjar_queue'),
+                $setup->getIdxName('taxjar_queue', ['attempts']),
+                ['attempts']
+            );
+            $installer->getConnection()->addIndex(
+                $setup->getTable('taxjar_queue'),
+                $setup->getIdxName('taxjar_queue', ['priority']),
+                ['priority']
+            );
+            $installer->endSetup();
+        }
     }
 }
