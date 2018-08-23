@@ -28,6 +28,7 @@ use Taxjar\SalesTax\Model\Logger;
 use Taxjar\SalesTax\Model\TransactionFactory;
 use Taxjar\SalesTax\Model\Transaction\OrderFactory;
 use Taxjar\SalesTax\Model\Transaction\RefundFactory;
+use Taxjar\SalesTax\Model\Queue;
 
 class Backfill
 {
@@ -82,12 +83,18 @@ class Backfill
     protected $logger;
 
     /**
+     * @var \Taxjar\SalesTax\Model\Queue
+     */
+    protected $queue;
+
+    /**
      * @param ScopeConfigInterface $scopeConfig
      * @param RequestInterface $request
      * @param TransactionFactory $transactionFactory
      * @param OrderFactory $orderFactory
      * @param RefundFactory $refundFactory
      * @param Logger $logger
+     * @param Queue $queue
      * @param \Magento\Sales\Api\OrderRepositoryInterface $orderRepository
      * @param \Magento\Framework\Api\FilterBuilder $filterBuilder
      * @param \Magento\Framework\Api\Search\FilterGroupBuilder $filterGroupBuilder
@@ -100,6 +107,7 @@ class Backfill
         OrderFactory $orderFactory,
         RefundFactory $refundFactory,
         Logger $logger,
+        Queue $queue,
         \Magento\Sales\Api\OrderRepositoryInterface $orderRepository,
         \Magento\Framework\Api\FilterBuilder $filterBuilder,
         \Magento\Framework\Api\Search\FilterGroupBuilder $filterGroupBuilder,
@@ -111,6 +119,7 @@ class Backfill
         $this->orderFactory = $orderFactory;
         $this->refundFactory = $refundFactory;
         $this->logger = $logger;
+        $this->queue = $queue;
         $this->orderRepository = $orderRepository;
         $this->filterBuilder = $filterBuilder;
         $this->filterGroupBuilder = $filterGroupBuilder;
@@ -168,6 +177,39 @@ class Backfill
         $fromDate->setTime(0, 0, 0);
         $toDate->setTime(23, 59, 59);
 
+        $this->queue->scheduleJob('\Taxjar\SalesTax\Model\Transaction\Backfill', 'enqueueRecords', [$fromDate, $toDate]);
+
+        return $this;
+    }
+
+    /**
+     * In a background thread find all records that fit in the from and to date
+     * and enqueue them to be sent to taxjar thread in a seperate processing thread.
+     *
+     * @param $fromDate
+     * @param $toDate
+     */
+    public function enqueueRecords($fromDate, $toDate)
+    {
+        // @codingStandardsIgnoreEnd
+        $apiKey = trim($this->scopeConfig->getValue(TaxjarConfig::TAXJAR_APIKEY));
+
+        if (!$apiKey) {
+            throw new LocalizedException(__('Could not sync transactions with TaxJar. Please make sure you have an API key.'));
+        }
+
+        $statesToMatch = ['complete', 'closed'];
+
+        $this->logger->log('Initializing TaxJar enqueue records');
+
+        $fromDate = new \DateTime($fromDate['date']);
+        $toDate = new \DateTime($toDate['date']);
+
+        $this->logger->log('Finding ' . implode(', ', $statesToMatch) . ' transactions from ' . $fromDate->format('m/d/Y') . ' - ' . $toDate->format('m/d/Y'));
+
+        $fromDate->setTime(0, 0, 0);
+        $toDate->setTime(23, 59, 59);
+
         $fromFilter = $this->filterBuilder->setField('created_at')
             ->setConditionType('gteq')
             ->setValue($fromDate->format('Y-m-d H:i:s'))
@@ -199,28 +241,32 @@ class Backfill
 
         $this->logger->log(count($orders) . ' transaction(s) found');
 
-        // This process can take awhile
-        @set_time_limit(0);
-        @ignore_user_abort(true);
-
+        // Need to enqueue these records in Taxjar queue
         foreach ($orders as $order) {
-            $orderTransaction = $this->orderFactory->create();
+            $this->queue->scheduleJob('\Taxjar\SalesTax\Model\Transaction\Backfill', 'processRecord', [$order->getId()]);
+        }
+    }
 
-            if ($orderTransaction->isSyncable($order)) {
-                $orderTransaction->build($order);
-                $orderTransaction->push();
+    /**
+     * @param $orderId
+     */
+    public function processRecord($orderId)
+    {
+        $order = $this->orderRepository->get($orderId);
+        $orderTransaction = $this->orderFactory->create();
 
-                $creditMemos = $order->getCreditmemosCollection();
+        if ($orderTransaction->isSyncable($order)) {
+            $orderTransaction->build($order);
+            $orderTransaction->push();
 
-                foreach ($creditMemos as $creditMemo) {
-                    $refundTransaction = $this->refundFactory->create();
-                    $refundTransaction->build($order, $creditMemo);
-                    $refundTransaction->push();
-                }
+            $creditMemos = $order->getCreditmemosCollection();
+
+            foreach ($creditMemos as $creditMemo) {
+                $refundTransaction = $this->refundFactory->create();
+                $refundTransaction->build($order, $creditMemo);
+                $refundTransaction->push();
             }
         }
-
-        return $this;
     }
 
     /**

@@ -21,5 +21,8 @@
         <job name="taxjar_backup_rates" instance="Taxjar\SalesTax\Observer\ImportRates" method="cron">
             <schedule>0 8 1 * *</schedule>
         </job>
+        <job name="taxjar_process_queue" instance="Taxjar\SalesTax\Cron\Queue" method="processQueue">
+            <schedule>* * * * *</schedule>
+        </job>
     </group>
 </config>
